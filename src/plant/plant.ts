@@ -10,9 +10,11 @@ const TIP_COLOR = new THREE.Color(0xdcffb0); // bright growing frontier
 // Lily colors — each plant picks one so a hand's lilies are a consistent shade.
 // Saturated (not near-white) so the bloom pass glows them in-color instead of
 // blowing them out to featureless white blobs.
-const LILY_PALETTE = [0xff5d8f, 0xff884d, 0xe0409a, 0xff9a3c, 0xc65cf0];
+const LILY_PALETTE = [0xff5d8f, 0xe0409a, 0xc65cf0, 0xff5470, 0xd94fb0];
 const LILY_STAMEN = 0xffe08a; // pale golden anthers (contrast on the petals)
 const LILY_CENTER = 0xfff3b0; // warm pale throat
+const SUNFLOWER_PETAL = 0xffc23a; // golden petals
+const SUNFLOWER_CENTER = 0x3d2914; // dark brown seed disc
 
 const BLOOM_WINDOW = 0.08; // how much growth-past-birth a flower takes to open
 
@@ -94,9 +96,33 @@ function makeStamenGeometry(count = 6): THREE.BufferGeometry {
   return geo;
 }
 
+/**
+ * Shared, immutable sunflower: a dense radial fan of pointed ray florets
+ * (unit outer radius) around a wide center disc.
+ */
+function makeSunflowerGeometry(petals = 18): THREE.BufferGeometry {
+  const rBase = 0.14;
+  const rMid = 0.58;
+  const rTip = 1.0;
+  const positions: number[] = [];
+  for (let i = 0; i < petals; i++) {
+    const a = (i / petals) * Math.PI * 2;
+    const hw = (Math.PI / petals) * 1.15; // slight overlap for a full head
+    const p0 = polar(rBase, a);
+    const p1 = polar(rMid, a - hw);
+    const p2 = polar(rTip, a);
+    const p3 = polar(rMid, a + hw);
+    positions.push(...p0, ...p1, ...p2, ...p0, ...p2, ...p3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  return geo;
+}
+
 const lilyPetalsGeometry = makeLilyPetalsGeometry();
 const stamenGeometry = makeStamenGeometry();
-const centerGeometry = new THREE.CircleGeometry(1, 20); // unit disc (throat), scaled per flower
+const sunflowerGeometry = makeSunflowerGeometry();
+const centerGeometry = new THREE.CircleGeometry(1, 20); // unit disc (throat/seed disc), scaled per flower
 
 export interface PlantVisual {
   group: THREE.Group;
@@ -107,16 +133,18 @@ export interface PlantVisual {
   dispose(): void;
 }
 
+// A flower is a set of meshes, each scaled by (flowerRadius * scale) as it
+// blooms. This lets sunflowers and lilies (different part counts/sizes) share
+// one bloom/fade code path.
 interface FlowerNode {
-  petals: THREE.Mesh;
-  stamens: THREE.Mesh;
-  center: THREE.Mesh;
+  parts: { mesh: THREE.Mesh; scale: number }[];
   birth: number;
 }
 
 /**
- * Build a renderable plant from generated geometry. `hue` selects the lily
- * color from the palette so each hand's plant is a different shade.
+ * Build a renderable plant from generated geometry. Tips alternate between
+ * sunflowers and lilies for a mixed bouquet; `hue` selects the lily shade so
+ * each hand's plant differs.
  */
 export function createPlantVisual(plant: Plant, hue = 0): PlantVisual {
   const group = new THREE.Group();
@@ -152,55 +180,58 @@ export function createPlantVisual(plant: Plant, hue = 0): PlantVisual {
   stems.frustumCulled = false;
   group.add(stems);
 
-  // ── lilies at tips ──
-  // Per-plant materials so each plant fades independently. `hue` picks one lily
-  // color from the palette, so a hand grows one consistent shade of lily.
-  const petalColor = LILY_PALETTE[Math.floor(hue * LILY_PALETTE.length) % LILY_PALETTE.length];
-  const petalMaterial = new THREE.MeshBasicMaterial({
-    color: petalColor,
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
-  const stamenMaterial = new THREE.MeshBasicMaterial({
-    color: LILY_STAMEN,
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
-  const centerMaterial = new THREE.MeshBasicMaterial({
-    color: LILY_CENTER,
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-  });
+  // ── mixed sunflowers + lilies at tips ──
+  // Per-plant materials so each plant fades independently. `hue` picks the lily
+  // shade; sunflowers are always gold so the mix stays readable.
+  const lilyColor = LILY_PALETTE[Math.floor(hue * LILY_PALETTE.length) % LILY_PALETTE.length];
+  const basic = (color: number) =>
+    new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+  const lilyPetalMat = basic(lilyColor);
+  const lilyStamenMat = basic(LILY_STAMEN);
+  const lilyThroatMat = basic(LILY_CENTER);
+  const sunPetalMat = basic(SUNFLOWER_PETAL);
+  const sunCenterMat = basic(SUNFLOWER_CENTER);
+  const allMaterials = [lilyPetalMat, lilyStamenMat, lilyThroatMat, sunPetalMat, sunCenterMat];
 
   const flowerRadius = plant.height * 0.06;
-  const flowerNodes: FlowerNode[] = plant.flowers.map((f) => {
-    const petals = new THREE.Mesh(lilyPetalsGeometry, petalMaterial);
-    petals.position.set(f.x, f.y, 0.01);
-    petals.rotation.z = f.angle;
-    petals.scale.setScalar(0);
-    petals.renderOrder = 4;
-    petals.frustumCulled = false;
+  let zBias = 0;
+  const makeMesh = (
+    geo: THREE.BufferGeometry,
+    mat: THREE.Material,
+    f: { x: number; y: number; angle: number },
+    order: number,
+    rotate: boolean
+  ): THREE.Mesh => {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(f.x, f.y, 0.01 + zBias);
+    zBias += 0.001;
+    if (rotate) mesh.rotation.z = f.angle;
+    mesh.scale.setScalar(0);
+    mesh.renderOrder = order;
+    mesh.frustumCulled = false;
+    group.add(mesh);
+    return mesh;
+  };
 
-    const center = new THREE.Mesh(centerGeometry, centerMaterial);
-    center.position.set(f.x, f.y, 0.02);
-    center.scale.setScalar(0);
-    center.renderOrder = 5;
-    center.frustumCulled = false;
-
-    const stamens = new THREE.Mesh(stamenGeometry, stamenMaterial);
-    stamens.position.set(f.x, f.y, 0.03);
-    stamens.rotation.z = f.angle;
-    stamens.scale.setScalar(0);
-    stamens.renderOrder = 6;
-    stamens.frustumCulled = false;
-
-    group.add(petals, center, stamens);
-    return { petals, stamens, center, birth: f.birth };
+  const flowerNodes: FlowerNode[] = plant.flowers.map((f, i) => {
+    const parts: { mesh: THREE.Mesh; scale: number }[] = [];
+    if (i % 2 === 0) {
+      // sunflower: petal ring + wide brown disc
+      parts.push({ mesh: makeMesh(sunflowerGeometry, sunPetalMat, f, 4, true), scale: 1 });
+      parts.push({ mesh: makeMesh(centerGeometry, sunCenterMat, f, 5, false), scale: 0.42 });
+    } else {
+      // lily: 6 tepals + pale throat + golden stamens
+      parts.push({ mesh: makeMesh(lilyPetalsGeometry, lilyPetalMat, f, 4, true), scale: 1 });
+      parts.push({ mesh: makeMesh(centerGeometry, lilyThroatMat, f, 5, false), scale: 0.18 });
+      parts.push({ mesh: makeMesh(stamenGeometry, lilyStamenMat, f, 6, true), scale: 1 });
+    }
+    return { parts, birth: f.birth };
   });
 
   function setGrowth(growth: number): void {
@@ -209,9 +240,7 @@ export function createPlantVisual(plant: Plant, hue = 0): PlantVisual {
       // 0 until growth reaches the flower's birth, easing to full over BLOOM_WINDOW.
       const t = THREE.MathUtils.clamp((growth - node.birth) / BLOOM_WINDOW, 0, 1);
       const s = t * t * (3 - 2 * t); // smoothstep
-      node.petals.scale.setScalar(s * flowerRadius);
-      node.stamens.scale.setScalar(s * flowerRadius);
-      node.center.scale.setScalar(s * flowerRadius * 0.18); // small pale throat
+      for (const part of node.parts) part.mesh.scale.setScalar(s * flowerRadius * part.scale);
     }
   }
   setGrowth(0);
@@ -226,18 +255,14 @@ export function createPlantVisual(plant: Plant, hue = 0): PlantVisual {
 
   function setOpacity(opacity: number): void {
     stemMaterial.uniforms.uOpacity.value = opacity;
-    petalMaterial.opacity = opacity;
-    stamenMaterial.opacity = opacity;
-    centerMaterial.opacity = opacity;
+    for (const m of allMaterials) m.opacity = opacity;
   }
 
   function dispose(): void {
     stemGeo.dispose();
     stemMaterial.dispose();
-    petalMaterial.dispose();
-    stamenMaterial.dispose();
-    centerMaterial.dispose();
-    // lilyPetalsGeometry/stamenGeometry/centerGeometry are shared — not disposed.
+    for (const m of allMaterials) m.dispose();
+    // shared flower geometries are reused across instances — not disposed.
   }
 
   return { group, setGrowth, setPosition, setSway, setOpacity, dispose };

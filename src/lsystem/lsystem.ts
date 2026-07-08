@@ -42,13 +42,13 @@ export interface PlantOptions {
   maxFlowers?: number;
 }
 
-// An asymmetric binary tree: every X is a growth tip that splits into two
-// branches (one carrying an extra F so the two sub-branches end at different
-// heights, spreading the tips out instead of clumping). After expansion the
-// remaining X's are the terminal tips — one sunflower each, so no branch end
-// is left bare and the tips stay well separated.
+// A monopodial bouquet: each X splits into two symmetric side branches AND a
+// central leader that continues straight up ([+X][-X] then F X). Because the
+// leader keeps going while side branches peel off, stems radiate UPWARD from a
+// common base at varying heights — a bouquet rather than a sideways fan. The
+// symmetry keeps it from leaning. Terminal X's are the tips (one flower each).
 const RULES: Record<string, string> = {
-  X: "F[+X][-FX]",
+  X: "F[+X][-X]FX",
   F: "FF",
 };
 const AXIOM = "X";
@@ -88,10 +88,10 @@ interface Turtle {
  */
 export function generatePlant(options: PlantOptions = {}): Plant {
   const {
-    iterations = 4,
-    angleDeg = 19,
+    iterations = 3,
+    angleDeg = 20,
     seed = 1,
-    jitter = 0.12,
+    jitter = 0.14,
     targetHeight = 1,
     maxFlowers = 60,
   } = options;
