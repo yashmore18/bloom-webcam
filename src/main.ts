@@ -1,5 +1,8 @@
 import "./style.css";
 import * as THREE from "three";
+import { HandTracking } from "./hand/hand-tracking";
+import { HandSkeleton } from "./hand/hand-skeleton";
+import type { HandState } from "./types";
 
 // ── DOM ───────────────────────────────────────────────────────────────────
 const mount = document.getElementById("scene-mount")!;
@@ -33,6 +36,21 @@ video.muted = true;
 
 let bgMesh: THREE.Mesh | null = null;
 
+// ── interaction + overlays ────────────────────────────────────────────────
+const handTracking = new HandTracking();
+const skeleton = new HandSkeleton();
+skeleton.init(scene);
+let tracking = false;
+
+// Dev-only debug hook: lets the headless test harness inject fake hand states
+// without a real camera. Guarded by import.meta.env.DEV so it's stripped from
+// production builds. (Route overrides through this plain object — reassigning
+// ES-module namespace exports from page context silently no-ops.)
+const debug: { forceStates: HandState[] | null } = { forceStates: null };
+if (import.meta.env.DEV) {
+  (window as unknown as { __bloomDebug: typeof debug }).__bloomDebug = debug;
+}
+
 function buildVideoBackground(): void {
   const texture = new THREE.VideoTexture(video);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -61,6 +79,9 @@ async function enableCamera(): Promise<void> {
   permissionBtn.disabled = true;
   permissionBtn.textContent = "Camera on";
   hint.hidden = false;
+
+  await handTracking.init(video);
+  tracking = true;
 }
 
 permissionBtn.addEventListener("click", () => {
@@ -86,6 +107,10 @@ function animate(): void {
   requestAnimationFrame(animate);
   const dt = clock.getDelta();
   void dt; // used once templates are wired in (Part 3)
+
+  const states = debug.forceStates ?? (tracking ? handTracking.getStates(performance.now()) : []);
+  skeleton.update(states);
+
   renderer.render(scene, camera);
 }
 animate();
