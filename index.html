@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bloom — pinch to grow</title>
+  </head>
+  <body>
+    <div id="scene-mount"></div>
+
+    <div id="ui">
+      <button id="permission-btn">Enable Camera</button>
+      <button id="record-btn" disabled>Record</button>
+      <button id="stop-btn" disabled>Stop</button>
+      <a id="download-link" download="bloom.webm" hidden>Download clip</a>
+    </div>
+
+    <p id="hint" hidden>Pinch your thumb &amp; index finger together, then spread them apart to grow a plant 🌱</p>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

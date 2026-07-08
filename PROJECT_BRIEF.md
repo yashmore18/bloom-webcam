@@ -1,54 +1,35 @@
-# Bloom — Webcam-Reactive Generative Art (Extensible Platform, v1: Multi-Hand Flower)
+# Bloom — Project Brief
 
-## 1. Problem Statement
-Generative, camera-reactive visual art (à la TouchDesigner + MediaPipe) is delightful but locked behind technical setup. Existing browser-based attempts at this (see Current Alternatives) are single-purpose demos — one effect, one interaction mode, no room to grow, no recording. This project builds a genuinely better version: architected so new templates and interaction modes can be added over time, while still shipping a real, polished v1 in days.
+## 1. What it is
+A webcam-reactive generative-art playground for the browser. You see your hands tracked live as a glowing skeleton, and you **pinch to grow procedural L-system plants** that bloom at their tips. No install, no login, fully client-side — a "TouchDesigner + MediaPipe" moment of delight that anyone can get in seconds.
 
-## 2. Target Users
-- Primary: anyone with a laptop and webcam who wants a moment of delight — friends, social media viewers, no technical skill required
-- Secondary (new): future-you, who wants to keep adding templates without rewriting the core each time
+## 2. Who it's for
+- Primary: anyone with a laptop + webcam who wants a quick, shareable moment of playful generative art — no technical skill required.
+- Secondary: future-me, who wants to keep adding generative templates and interaction modes on top of a clean seam.
 
-## 3. Current Alternatives (researched)
-- **GestureFlower** (Seek4AI): hand-openness controls a single flower's bloom. Single hand, single template, no recording.
-- **Bloom — Gesture Recognition** (Prasiddhi16): gesture-triggered flower blooms plus other effects; own roadmap explicitly lists multi-hand support as not-yet-built.
-- **Gesture-Particles** (Krishna71340): the strongest existing competitor — MediaPipe + Three.js, multiple gesture-triggered shapes (sphere, Saturn, flower, heart), but one active shape/gesture at a time, no simultaneous multi-person state, no recording.
+## 3. Why it's different
+Existing camera-reactive flower/gesture demos (GestureFlower, Gesture-Particles, etc.) are single-effect, single-hand, gesture-switching, no recording. Bloom differentiates on: **live visible hand tracking** (you see the skeleton), **direct pinch-to-grow control** of **procedural L-system plants** (not one canned shape), **simultaneous independent two-hand interaction**, **recording/export**, and **bloom-glow visual polish** — on an architecture where adding a new generative template is a one-file change.
 
-**Our differentiation:** simultaneous independent multi-hand/multi-person interaction (not gesture-switching one shape at a time), recording/export, higher visual polish (bloom postprocessing), and an architecture that makes adding templates cheap over time — none of the above have all of these.
+## 4. MVP scope (v1)
+**In:**
+- Mirrored live webcam background (inside the three.js scene).
+- Live glowing 21-landmark hand skeleton overlay, up to 2 hands.
+- Pinch-to-grow L-system plants — one per hand — that grow/bloom with pinch spread, follow the hand, and fade out when the hand leaves.
+- Bloom (glow) postprocessing.
+- Record → stop → download a `.webm` clip.
+- Two small extensibility interfaces (`InteractionSource`, `TemplateModule`) so a second template/interaction mode is cheap later.
 
-## 4. Why This Matters
-Two goals now, both legitimate: (a) a delightful, shareable experience for the person trying it, (b) a system worth being proud of and easy to keep building on. Success = a stranger gets it in under 10 seconds, has a moment of delight, records a clip — AND the codebase makes adding a second template a same-day task, not a rewrite.
+**Out (future work, enabled but not built):** a second actual template, a template-picker UI, >2 hands / multi-person, pose/face interaction modes, deep per-plant customization UI, mobile/non-Chrome support, accounts, sharing gallery, any backend, any analytics.
 
-## 5. MVP Scope — v1, still shippable in days
-**In scope:**
-- Two small extensibility interfaces (`TemplateModule`, `InteractionSource`) that the flower template and hand-tracking are built against — see ARCHITECTURE.md
-- One polished template: flowers that bloom and follow hands, one flower per hand, up to 2 (one person, both hands)
-- Webcam permission → live mirrored video background (three.js scene background)
-- Record button → stop → download a video clip (webm)
-- A minimal template registry (even with just one entry) so the switching mechanism exists structurally
-- Single static page, no backend, no login, no build step (three.js + MediaPipe loaded via CDN ESM imports)
+## 5. Definition of done
+- Deployed to a public Vercel URL, works in Chrome desktop.
+- Camera on → hands tracked live (skeleton visible) → pinch grows/blooms plants that follow each hand independently → record → download plays back.
+- Degrades gracefully with zero or one hand; no console errors.
+- A developer could add a second generative template by writing one file that implements `TemplateModule`, without editing `main.ts`'s loop.
 
-**Explicitly OUT of scope for v1 (future work, enabled but not built now):**
-- A second template (shapes, particles, patterns) — architecture supports it, not building it yet
-- More than 2 tracked hands / multiple people in frame
-- Pose or face tracking as additional interaction modes
-- Deep per-template customization UI (colors, species, physics presets)
-- Node graph / custom programming for end users
-- Mobile optimization, accounts, sharing gallery, non-Chrome support
-- Monetization of any kind
+## 6. Risks
+- Over-engineering the extensibility layer — keep both interfaces to 2–3 methods.
+- L-system growth/perf and pinch-mapping tuning eating time — keep it simple, cut scope before over-building.
+- Tracking jitter in poor lighting; low-end GPU perf with bloom + 2 plants — accepted for v1 (cut bloom if it costs framerate).
 
-## 6. Definition of Done (v1)
-- [ ] Deployed to a public static URL (Vercel)
-- [ ] Works in Chrome desktop: camera on → hands tracked independently → flowers bloom/follow → record → download plays back correctly
-- [ ] Degrades gracefully with zero or one hand
-- [ ] A developer (you, or Claude Code) could add a second template by writing one new file implementing `TemplateModule`, without modifying `main.js`'s core loop — this is the actual test of "done properly"
-- [ ] Sent to 3+ friends for a real reaction
-
-## 7. Risks
-- Over-engineering the extensibility layer is the new failure mode — keep both interfaces to 2-3 methods each, resist adding configuration nobody's asked for yet
-- Gesture-Particles is a real, already-shipped competitor with template-switching — "versatile" needs to visibly exceed it, not just match it
-- Performance on low-end laptops; tracking jitter in bad lighting — same as before, accepted for v1
-
-## 8. Next Steps After v1
-1. Send to friends, watch real reactions
-2. Add template #2 (a shape or particle effect) as the first real test of the extensibility architecture
-3. Only then consider a second interaction mode (pose/face) or a template picker UI
-
+See `ARCHITECTURE.md` for the technical approach and `CLAUDE.md` for build workflow and conventions.
