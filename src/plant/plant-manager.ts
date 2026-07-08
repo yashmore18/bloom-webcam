@@ -71,7 +71,7 @@ export class PlantTemplate implements TemplateModule {
 
   private spawn(id: number): Entry {
     // Per-hand seed & hue so the two plants differ.
-    const geometry = generatePlant({ iterations: 4, seed: id * 1013 + 7, targetHeight: PLANT_HEIGHT });
+    const geometry = generatePlant({ iterations: 3, seed: id * 1013 + 7, targetHeight: PLANT_HEIGHT });
     const visual = createPlantVisual(geometry, (id * 0.17) % 1);
     this.scene.add(visual.group);
     const entry: Entry = {

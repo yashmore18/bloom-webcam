@@ -48,7 +48,7 @@ describe("generatePlant", () => {
   });
 
   it("[measurement] segment/flower counts by depth", () => {
-    for (const iterations of [4, 5, 6]) {
+    for (const iterations of [2, 3, 4]) {
       const p = generatePlant({ iterations });
       // eslint-disable-next-line no-console
       console.log(`depth ${iterations}: ${p.segments.length} segments, ${p.flowers.length} flowers`);
