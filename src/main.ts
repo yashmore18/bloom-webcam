@@ -41,9 +41,9 @@ const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.85, // strength
+  0.55, // strength — dialed down so bloomed flowers stay legible, not washed out
   0.5, // radius
-  0.5 // threshold
+  0.55 // threshold
 );
 composer.addPass(bloomPass);
 composer.addPass(new OutputPass());

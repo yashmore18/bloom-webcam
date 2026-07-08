@@ -18,8 +18,9 @@ const THUMB_TIP = 4;
 const INDEX_TIP = 8;
 
 // Map the raw pinch ratio (finger gap / hand size) into a 0..1 openness.
-const PINCH_MIN = 0.18; // fingers touching
-const PINCH_MAX = 1.5; // fingers spread wide
+// A smaller PINCH_MAX means less finger spread is needed to fully bloom.
+const PINCH_MIN = 0.2; // fingers touching → seed
+const PINCH_MAX = 0.9; // a moderate spread already reads as fully grown
 
 interface TrackedHand {
   smoothed: Landmark[];

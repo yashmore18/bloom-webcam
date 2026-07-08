@@ -7,7 +7,8 @@ import type { Plant } from "../lsystem/lsystem";
 
 const STEM_COLOR = new THREE.Color(0x2fd35a); // lime stem
 const TIP_COLOR = new THREE.Color(0xdcffb0); // bright growing frontier
-const FLOWER_PALETTE = [0xff5d8f, 0xffd23f, 0xff8c42, 0xc77dff, 0xff6f61];
+const SUNFLOWER_PETAL = 0xffc23a; // golden petals
+const SUNFLOWER_CENTER = 0x3d2914; // dark brown seed disc
 
 const BLOOM_WINDOW = 0.08; // how much growth-past-birth a flower takes to open
 
@@ -36,23 +37,32 @@ const fragmentShader = /* glsl */ `
   }
 `;
 
-/** Shared, immutable rosette outline for tiny tip flowers (6 lobes). */
-function makeRosetteGeometry(): THREE.ShapeGeometry {
-  const shape = new THREE.Shape();
-  const steps = 72;
-  for (let i = 0; i <= steps; i++) {
-    const t = (i / steps) * Math.PI * 2;
-    const r = 0.62 + 0.38 * Math.cos(6 * t);
-    const x = Math.cos(t) * r;
-    const y = Math.sin(t) * r;
-    if (i === 0) shape.moveTo(x, y);
-    else shape.lineTo(x, y);
+/**
+ * Shared, immutable sunflower petal ring: a radial fan of pointed petals
+ * (unit outer radius) built as raw triangles, so a bloom reads as a sunflower.
+ */
+function makeSunflowerGeometry(petals = 18): THREE.BufferGeometry {
+  const rBase = 0.14;
+  const rMid = 0.58;
+  const rTip = 1.0;
+  const positions: number[] = [];
+  const polar = (r: number, a: number) => [Math.cos(a) * r, Math.sin(a) * r, 0];
+  for (let i = 0; i < petals; i++) {
+    const a = (i / petals) * Math.PI * 2;
+    const hw = (Math.PI / petals) * 1.15; // slight overlap for a full head
+    const p0 = polar(rBase, a);
+    const p1 = polar(rMid, a - hw);
+    const p2 = polar(rTip, a); // pointed tip
+    const p3 = polar(rMid, a + hw);
+    positions.push(...p0, ...p1, ...p2, ...p0, ...p2, ...p3);
   }
-  return new THREE.ShapeGeometry(shape, 16);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  return geo;
 }
 
-const rosetteGeometry = makeRosetteGeometry();
-const centerGeometry = new THREE.CircleGeometry(0.4, 16);
+const sunflowerGeometry = makeSunflowerGeometry();
+const centerGeometry = new THREE.CircleGeometry(1, 24); // unit disc, scaled per flower
 
 export interface PlantVisual {
   group: THREE.Group;
@@ -107,28 +117,26 @@ export function createPlantVisual(plant: Plant, hue = 0): PlantVisual {
   stems.frustumCulled = false;
   group.add(stems);
 
-  // ── flowers at tips ──
-  // Per-plant materials so each plant fades independently.
-  const petalMaterials = FLOWER_PALETTE.map(
-    (c) =>
-      new THREE.MeshBasicMaterial({
-        color: new THREE.Color(c).offsetHSL(hue, 0, 0),
-        transparent: true,
-        depthTest: false,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      })
-  );
+  // ── sunflowers at tips ──
+  // Per-plant materials so each plant fades independently. A tiny hue nudge
+  // keeps them all golden but subtly varied between hands.
+  const petalMaterial = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(SUNFLOWER_PETAL).offsetHSL((hue - 0.5) * 0.05, 0, 0),
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
   const centerMaterial = new THREE.MeshBasicMaterial({
-    color: 0xfff3c4,
+    color: SUNFLOWER_CENTER,
     transparent: true,
     depthTest: false,
     depthWrite: false,
   });
 
-  const flowerRadius = plant.height * 0.05;
-  const flowerNodes: FlowerNode[] = plant.flowers.map((f, i) => {
-    const mesh = new THREE.Mesh(rosetteGeometry, petalMaterials[i % petalMaterials.length]);
+  const flowerRadius = plant.height * 0.06;
+  const flowerNodes: FlowerNode[] = plant.flowers.map((f) => {
+    const mesh = new THREE.Mesh(sunflowerGeometry, petalMaterial);
     mesh.position.set(f.x, f.y, 0.01);
     mesh.rotation.z = f.angle;
     mesh.scale.setScalar(0);
@@ -152,7 +160,7 @@ export function createPlantVisual(plant: Plant, hue = 0): PlantVisual {
       const t = THREE.MathUtils.clamp((growth - node.birth) / BLOOM_WINDOW, 0, 1);
       const s = t * t * (3 - 2 * t); // smoothstep
       node.mesh.scale.setScalar(s * flowerRadius);
-      node.center.scale.setScalar(s * flowerRadius * 0.45);
+      node.center.scale.setScalar(s * flowerRadius * 0.42); // brown disc ~0.4 of petal reach
     }
   }
   setGrowth(0);
@@ -167,16 +175,16 @@ export function createPlantVisual(plant: Plant, hue = 0): PlantVisual {
 
   function setOpacity(opacity: number): void {
     stemMaterial.uniforms.uOpacity.value = opacity;
-    for (const m of petalMaterials) m.opacity = opacity;
+    petalMaterial.opacity = opacity;
     centerMaterial.opacity = opacity;
   }
 
   function dispose(): void {
     stemGeo.dispose();
     stemMaterial.dispose();
-    for (const m of petalMaterials) m.dispose();
+    petalMaterial.dispose();
     centerMaterial.dispose();
-    // rosetteGeometry/centerGeometry are shared across instances — not disposed.
+    // sunflowerGeometry/centerGeometry are shared across instances — not disposed.
   }
 
   return { group, setGrowth, setPosition, setSway, setOpacity, dispose };
