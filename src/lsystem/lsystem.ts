@@ -89,9 +89,9 @@ interface Turtle {
 export function generatePlant(options: PlantOptions = {}): Plant {
   const {
     iterations = 4,
-    angleDeg = 30,
+    angleDeg = 19,
     seed = 1,
-    jitter = 0.18,
+    jitter = 0.12,
     targetHeight = 1,
     maxFlowers = 60,
   } = options;
