@@ -42,8 +42,13 @@ export interface PlantOptions {
   maxFlowers?: number;
 }
 
+// An asymmetric binary tree: every X is a growth tip that splits into two
+// branches (one carrying an extra F so the two sub-branches end at different
+// heights, spreading the tips out instead of clumping). After expansion the
+// remaining X's are the terminal tips — one sunflower each, so no branch end
+// is left bare and the tips stay well separated.
 const RULES: Record<string, string> = {
-  X: "F+[[X]-X]-F[-FX]+X",
+  X: "F[+X][-FX]",
   F: "FF",
 };
 const AXIOM = "X";
@@ -84,11 +89,11 @@ interface Turtle {
 export function generatePlant(options: PlantOptions = {}): Plant {
   const {
     iterations = 4,
-    angleDeg = 22,
+    angleDeg = 30,
     seed = 1,
-    jitter = 0.12,
+    jitter = 0.18,
     targetHeight = 1,
-    maxFlowers = 36,
+    maxFlowers = 60,
   } = options;
 
   const rand = mulberry32(seed);
@@ -135,9 +140,14 @@ export function generatePlant(options: PlantOptions = {}): Plant {
     }
   }
 
+  // Normalize births into [0, BIRTH_MAX] rather than [0, 1]: growth only
+  // approaches the pinch target (max 1.0) asymptotically, and a tip needs
+  // growth > birth to reveal, so births must top out below 1 or the outermost
+  // branch/flower would never fully bloom (leaving a bare branch end).
+  const BIRTH_MAX = 0.85;
   const norm = maxDist || 1;
-  for (const s of segments) s.birth = Math.min(1, s.birth / norm);
-  for (const f of rawFlowers) f.birth = Math.min(1, f.birth / norm);
+  for (const s of segments) s.birth = Math.min(1, s.birth / norm) * BIRTH_MAX;
+  for (const f of rawFlowers) f.birth = Math.min(1, f.birth / norm) * BIRTH_MAX;
 
   // Scale so the plant is targetHeight tall, root at origin.
   let minY = 0;
@@ -159,7 +169,9 @@ export function generatePlant(options: PlantOptions = {}): Plant {
     f.y *= scale;
   }
 
-  const flowers = dedupeFlowers(rawFlowers, targetHeight * 0.05, maxFlowers);
+  // Merge tips closer than roughly a flower's radius so adjacent blooms don't
+  // overlap into "peanut" blobs, while keeping one flower per distinct tip.
+  const flowers = dedupeFlowers(rawFlowers, targetHeight * 0.065, maxFlowers);
   return { segments, flowers, height: targetHeight };
 }
 
