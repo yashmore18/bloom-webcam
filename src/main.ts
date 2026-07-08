@@ -2,7 +2,8 @@ import "./style.css";
 import * as THREE from "three";
 import { HandTracking } from "./hand/hand-tracking";
 import { HandSkeleton } from "./hand/hand-skeleton";
-import type { HandState } from "./types";
+import { PlantTemplate } from "./plant/plant-manager";
+import type { HandState, TemplateModule } from "./types";
 
 // ── DOM ───────────────────────────────────────────────────────────────────
 const mount = document.getElementById("scene-mount")!;
@@ -41,6 +42,14 @@ const handTracking = new HandTracking();
 const skeleton = new HandSkeleton();
 skeleton.init(scene);
 let tracking = false;
+
+// Template registry — one entry today (the L-system plant). Adding a second
+// generative template later means adding an entry here; the loop stays the same.
+const templates: { name: string; module: TemplateModule }[] = [
+  { name: "plant", module: new PlantTemplate() },
+];
+const activeTemplate = templates[0].module;
+activeTemplate.init(scene);
 
 // Dev-only debug hook: lets the headless test harness inject fake hand states
 // without a real camera. Guarded by import.meta.env.DEV so it's stripped from
@@ -106,10 +115,10 @@ const clock = new THREE.Clock();
 function animate(): void {
   requestAnimationFrame(animate);
   const dt = clock.getDelta();
-  void dt; // used once templates are wired in (Part 3)
 
   const states = debug.forceStates ?? (tracking ? handTracking.getStates(performance.now()) : []);
   skeleton.update(states);
+  activeTemplate.update(states, dt);
 
   renderer.render(scene, camera);
 }
