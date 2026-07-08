@@ -8,5 +8,8 @@ export default defineConfig({
   build: {
     target: "es2022",
     outDir: "dist",
+    // three.js + MediaPipe are legitimately large single deps; the default
+    // 500 kB warning is just noise here.
+    chunkSizeWarningLimit: 2000,
   },
 });
