@@ -1,13 +1,21 @@
 import "./style.css";
 import * as THREE from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { HandTracking } from "./hand/hand-tracking";
 import { HandSkeleton } from "./hand/hand-skeleton";
 import { PlantTemplate } from "./plant/plant-manager";
+import { Recorder } from "./recorder";
 import type { HandState, TemplateModule } from "./types";
 
 // ── DOM ───────────────────────────────────────────────────────────────────
 const mount = document.getElementById("scene-mount")!;
 const permissionBtn = document.getElementById("permission-btn") as HTMLButtonElement;
+const recordBtn = document.getElementById("record-btn") as HTMLButtonElement;
+const stopBtn = document.getElementById("stop-btn") as HTMLButtonElement;
+const downloadLink = document.getElementById("download-link") as HTMLAnchorElement;
 const hint = document.getElementById("hint") as HTMLParagraphElement;
 
 // ── three.js core ─────────────────────────────────────────────────────────
@@ -25,6 +33,20 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.7));
 const keyLight = new THREE.DirectionalLight(0xffffff, 0.8);
 keyLight.position.set(0.5, 1, 1);
 scene.add(keyLight);
+
+// ── bloom postprocessing (the glow aesthetic) ──────────────────────────────
+// The webcam plane is dimmed (below) so the threshold cleanly separates the
+// bright plants/skeleton (which bloom) from the video (which mostly doesn't).
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.85, // strength
+  0.5, // radius
+  0.5 // threshold
+);
+composer.addPass(bloomPass);
+composer.addPass(new OutputPass());
 
 // ── mirrored webcam background ────────────────────────────────────────────
 // A hidden <video> feeds a VideoTexture on a full-frustum plane. Rendering the
@@ -71,6 +93,9 @@ function buildVideoBackground(): void {
 
   const material = new THREE.MeshBasicMaterial({
     map: texture,
+    // Dim the webcam so it sits below the bloom threshold and the glowing
+    // plants/skeleton pop against it.
+    color: 0x8a8a8a,
     depthTest: false,
     depthWrite: false,
   });
@@ -94,22 +119,47 @@ async function enableCamera(): Promise<void> {
 }
 
 permissionBtn.addEventListener("click", () => {
-  enableCamera().catch((err) => {
-    console.error("Camera permission failed:", err);
-    permissionBtn.textContent = "Camera denied — retry";
-  });
+  enableCamera()
+    .then(() => {
+      recordBtn.disabled = false;
+    })
+    .catch((err) => {
+      console.error("Camera permission failed:", err);
+      permissionBtn.textContent = "Camera denied — retry";
+    });
+});
+
+// ── recording ─────────────────────────────────────────────────────────────
+const recorder = new Recorder(renderer.domElement, (url) => {
+  downloadLink.href = url;
+  downloadLink.hidden = false;
+});
+
+recordBtn.addEventListener("click", () => {
+  recorder.start();
+  recordBtn.disabled = true;
+  stopBtn.disabled = false;
+  downloadLink.hidden = true;
+});
+
+stopBtn.addEventListener("click", () => {
+  recorder.stop();
+  stopBtn.disabled = true;
+  recordBtn.disabled = false;
 });
 
 // ── resize ────────────────────────────────────────────────────────────────
 function resize(): void {
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  renderer.setSize(w, h);
+  composer.setSize(w, h);
+  bloomPass.resolution.set(w, h);
 }
 window.addEventListener("resize", resize);
 resize();
 
 // ── render loop ───────────────────────────────────────────────────────────
-// Templates and hand-tracking slot into this loop in Parts 2–3; for now it
-// just renders the mirrored webcam so the foundation is verifiable on its own.
 const clock = new THREE.Clock();
 
 function animate(): void {
@@ -120,6 +170,6 @@ function animate(): void {
   skeleton.update(states);
   activeTemplate.update(states, dt);
 
-  renderer.render(scene, camera);
+  composer.render();
 }
 animate();
