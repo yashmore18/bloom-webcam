@@ -5,8 +5,8 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { HandTracking } from "./hand/hand-tracking";
-import { HandSkeleton } from "./hand/hand-skeleton";
-import { PlantTemplate } from "./plant/plant-manager";
+import { PinchOverlay } from "./hand/pinch-overlay";
+import { SunflowerTemplate } from "./plant/plant-manager";
 import { Recorder } from "./recorder";
 import type { HandState, TemplateModule } from "./types";
 
@@ -61,14 +61,14 @@ let bgMesh: THREE.Mesh | null = null;
 
 // ── interaction + overlays ────────────────────────────────────────────────
 const handTracking = new HandTracking();
-const skeleton = new HandSkeleton();
-skeleton.init(scene);
+const overlay = new PinchOverlay();
+overlay.init(scene);
 let tracking = false;
 
-// Template registry — one entry today (the L-system plant). Adding a second
-// generative template later means adding an entry here; the loop stays the same.
+// Template registry — one entry today (the grow/bloom sunflower). Adding a
+// second template later means adding an entry here; the loop stays the same.
 const templates: { name: string; module: TemplateModule }[] = [
-  { name: "plant", module: new PlantTemplate() },
+  { name: "sunflower", module: new SunflowerTemplate() },
 ];
 const activeTemplate = templates[0].module;
 activeTemplate.init(scene);
@@ -167,7 +167,7 @@ function animate(): void {
   const dt = clock.getDelta();
 
   const states = debug.forceStates ?? (tracking ? handTracking.getStates(performance.now()) : []);
-  skeleton.update(states);
+  overlay.update(states);
   activeTemplate.update(states, dt);
 
   composer.render();
