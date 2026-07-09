@@ -25,6 +25,9 @@ export interface HandState {
   landmarks: Landmark[];
 }
 
+/** Which parameter a hand drives in the two-hand grow/bloom interaction. */
+export type HandRole = "grow" | "bloom";
+
 /**
  * Any input method (hand-tracking today, pose/face later) implements this.
  * Intentionally 2 methods — see HandState for where the real data lives.
