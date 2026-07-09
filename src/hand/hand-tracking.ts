@@ -1,5 +1,5 @@
 import { HandLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
-import type { HandState, InteractionSource, Landmark } from "../types";
+import type { HandState, Handedness, InteractionSource, Landmark } from "../types";
 
 // Keep this in sync with the @mediapipe/tasks-vision version in package.json —
 // the JS (from npm) and the WASM (from CDN) must match. Verified to resolve.
@@ -22,8 +22,16 @@ const INDEX_TIP = 8;
 const PINCH_MIN = 0.2; // fingers touching → 0
 const PINCH_MAX = 0.9; // a moderate spread already reads as fully open
 
+const HANDEDNESS_MIN_SCORE = 0.85; // ignore low-confidence Left/Right labels
+
+interface Detection {
+  landmarks: Landmark[];
+  handedness?: Handedness;
+}
+
 interface TrackedHand {
   smoothed: Landmark[];
+  handedness?: Handedness;
   lastSeen: number;
 }
 
@@ -62,9 +70,14 @@ export class HandTracking implements InteractionSource {
     if (!this.landmarker || !video || video.readyState < 2) return [];
 
     const result = this.landmarker.detectForVideo(video, timestamp);
-    const detections: Landmark[][] = (result.landmarks ?? []).map((lms) =>
-      lms.map((p) => ({ x: p.x, y: p.y, z: p.z }))
-    );
+    const detections: Detection[] = (result.landmarks ?? []).map((lms, i) => {
+      const cat = result.handedness?.[i]?.[0];
+      const handedness =
+        cat && cat.score >= HANDEDNESS_MIN_SCORE
+          ? (cat.categoryName as Handedness)
+          : undefined;
+      return { landmarks: lms.map((p) => ({ x: p.x, y: p.y, z: p.z })), handedness };
+    });
     this.assignIds(detections, timestamp);
 
     const states: HandState[] = [];
@@ -76,6 +89,7 @@ export class HandTracking implements InteractionSource {
         ...this.pinchMidpointScene(lms),
         pinch: this.computePinch(lms),
         landmarks: lms,
+        handedness: hand.handedness,
       });
     }
     return states;
@@ -96,20 +110,26 @@ export class HandTracking implements InteractionSource {
 
   /**
    * Greedy nearest-neighbor: match each detection to the closest previously
-   * tracked hand (by palm position) within a threshold. Enough for 2 hands.
+   * tracked hand (by palm position) within a threshold. Handedness is a soft
+   * preference (matching-handedness pairs sort first) so the two hands don't
+   * swap/merge when they get close — but acceptance is still gated by raw
+   * distance, so a brief handedness flicker can't break tracking continuity.
    */
-  private assignIds(detections: Landmark[][], now: number): void {
+  private assignIds(detections: Detection[], now: number): void {
     const trackedEntries = [...this.tracked.entries()];
     const usedTrackIds = new Set<number>();
     const usedDetections = new Set<number>();
 
-    const pairs: { di: number; id: number; d: number }[] = [];
-    detections.forEach((lms, di) => {
+    const pairs: { di: number; id: number; d: number; rank: number }[] = [];
+    detections.forEach((det, di) => {
       for (const [id, hand] of trackedEntries) {
-        pairs.push({ di, id, d: dist(lms[PALM_CENTER], hand.smoothed[PALM_CENTER]) });
+        const d = dist(det.landmarks[PALM_CENTER], hand.smoothed[PALM_CENTER]);
+        const mismatch =
+          det.handedness && hand.handedness && det.handedness !== hand.handedness ? 0.15 : 0;
+        pairs.push({ di, id, d, rank: d + mismatch });
       }
     });
-    pairs.sort((a, b) => a.d - b.d);
+    pairs.sort((a, b) => a.rank - b.rank);
 
     const detectionToId = new Map<number, number>();
     for (const { di, id, d } of pairs) {
@@ -120,17 +140,17 @@ export class HandTracking implements InteractionSource {
       usedTrackIds.add(id);
     }
 
-    detections.forEach((lms, di) => {
+    detections.forEach((det, di) => {
       const id = detectionToId.get(di) ?? this.nextId++;
       const existing = this.tracked.get(id);
       const smoothed = existing
-        ? lms.map((p, i) => ({
+        ? det.landmarks.map((p, i) => ({
             x: lerp(existing.smoothed[i].x, p.x, SMOOTHING),
             y: lerp(existing.smoothed[i].y, p.y, SMOOTHING),
             z: lerp(existing.smoothed[i].z, p.z, SMOOTHING),
           }))
-        : lms;
-      this.tracked.set(id, { smoothed, lastSeen: now });
+        : det.landmarks;
+      this.tracked.set(id, { smoothed, handedness: det.handedness ?? existing?.handedness, lastSeen: now });
     });
 
     for (const [id, hand] of this.tracked) {
