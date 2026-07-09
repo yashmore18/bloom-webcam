@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import type { HandState, Landmark } from "../types";
+import type { HandState, HandRole, Landmark } from "../types";
+import { assignRoles } from "./roles";
 
 // MediaPipe hand landmark connectivity (21 points → 21 bones).
 const HAND_CONNECTIONS: [number, number][] = [
@@ -12,10 +13,17 @@ const HAND_CONNECTIONS: [number, number][] = [
 ];
 
 const LANDMARK_COUNT = 21;
+const WRIST = 0;
 const Z = 0.02; // just in front of the video background plane
 
-const BONE_COLOR = 0x37e8ff; // cyan
-const JOINT_COLOR = 0xeafcff; // near-white
+// Tint each hand's skeleton + label by its role so you can see at a glance
+// which hand grows and which blooms.
+const ROLE_COLOR: Record<HandRole, number> = {
+  grow: 0x39e08a, // green
+  bloom: 0xffc23a, // gold
+};
+const ROLE_LABEL: Record<HandRole, string> = { grow: "Grow", bloom: "Bloom" };
+const FALLBACK_COLOR = 0x9fe8ff; // used only before a role is assigned
 
 // Landmarks arrive in normalized [0,1] image coords; mirror X and map to the
 // scene's [-1,1] frustum to line up with the mirrored webcam.
@@ -43,47 +51,36 @@ function makeDotTexture(): THREE.Texture {
 interface Slot {
   group: THREE.Group;
   bones: THREE.LineSegments;
+  boneMat: THREE.LineBasicMaterial;
   joints: THREE.Points;
+  jointMat: THREE.PointsMaterial;
+  label: THREE.Sprite;
+  labelCanvas: HTMLCanvasElement;
+  labelTexture: THREE.CanvasTexture;
+  lastText: string;
 }
 
 /**
- * Draws a glowing 21-landmark skeleton for each active hand. Per-hand buffers
- * are created once and their positions rewritten each frame (no per-frame
- * geometry allocation); slots for hands that disappear are disposed.
+ * Draws a glowing 21-landmark skeleton for each active hand, tinted by role
+ * (green = Grow, gold = Bloom) with a small live label ("Grow: 0.46"). Per-hand
+ * buffers/materials are created once and updated each frame; slots for hands
+ * that disappear are disposed.
  */
 export class HandSkeleton {
   private scene!: THREE.Scene;
   private dotTexture!: THREE.Texture;
-  private boneMaterial!: THREE.LineBasicMaterial;
-  private jointMaterial!: THREE.PointsMaterial;
   private slots = new Map<number, Slot>();
   private tmp = new THREE.Vector3();
 
   init(scene: THREE.Scene): void {
     this.scene = scene;
     this.dotTexture = makeDotTexture();
-    this.boneMaterial = new THREE.LineBasicMaterial({
-      color: BONE_COLOR,
-      transparent: true,
-      opacity: 0.9,
-      depthTest: false,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-    this.jointMaterial = new THREE.PointsMaterial({
-      color: JOINT_COLOR,
-      map: this.dotTexture,
-      size: 16,
-      sizeAttenuation: false,
-      transparent: true,
-      depthTest: false,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
   }
 
   update(states: HandState[]): void {
+    const roles = assignRoles(states);
     const seen = new Set<number>();
+
     for (const state of states) {
       if (state.landmarks.length < LANDMARK_COUNT) continue;
       seen.add(state.id);
@@ -92,26 +89,24 @@ export class HandSkeleton {
         slot = this.createSlot();
         this.slots.set(state.id, slot);
       }
+      const role = roles.get(state.id);
+      const color = role ? ROLE_COLOR[role] : FALLBACK_COLOR;
+      slot.boneMat.color.setHex(color);
+      slot.jointMat.color.setHex(color);
       this.writeSlot(slot, state.landmarks);
+      this.updateLabel(slot, state, role, color);
     }
+
     for (const [id, slot] of this.slots) {
       if (seen.has(id)) continue;
-      this.scene.remove(slot.group);
-      slot.bones.geometry.dispose();
-      slot.joints.geometry.dispose();
+      this.disposeSlot(slot);
       this.slots.delete(id);
     }
   }
 
   dispose(): void {
-    for (const slot of this.slots.values()) {
-      this.scene.remove(slot.group);
-      slot.bones.geometry.dispose();
-      slot.joints.geometry.dispose();
-    }
+    for (const slot of this.slots.values()) this.disposeSlot(slot);
     this.slots.clear();
-    this.boneMaterial.dispose();
-    this.jointMaterial.dispose();
     this.dotTexture.dispose();
   }
 
@@ -121,7 +116,14 @@ export class HandSkeleton {
       "position",
       new THREE.BufferAttribute(new Float32Array(HAND_CONNECTIONS.length * 2 * 3), 3)
     );
-    const bones = new THREE.LineSegments(boneGeo, this.boneMaterial);
+    const boneMat = new THREE.LineBasicMaterial({
+      transparent: true,
+      opacity: 0.9,
+      depthTest: false,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const bones = new THREE.LineSegments(boneGeo, boneMat);
     bones.renderOrder = 2;
     bones.frustumCulled = false;
 
@@ -130,14 +132,38 @@ export class HandSkeleton {
       "position",
       new THREE.BufferAttribute(new Float32Array(LANDMARK_COUNT * 3), 3)
     );
-    const joints = new THREE.Points(jointGeo, this.jointMaterial);
+    const jointMat = new THREE.PointsMaterial({
+      map: this.dotTexture,
+      size: 16,
+      sizeAttenuation: false,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const joints = new THREE.Points(jointGeo, jointMat);
     joints.renderOrder = 3;
     joints.frustumCulled = false;
 
+    const labelCanvas = document.createElement("canvas");
+    labelCanvas.width = 256;
+    labelCanvas.height = 64;
+    const labelTexture = new THREE.CanvasTexture(labelCanvas);
+    const label = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: labelTexture,
+        transparent: true,
+        depthTest: false,
+        depthWrite: false,
+      })
+    );
+    label.scale.set(0.42, 0.105, 1);
+    label.renderOrder = 4;
+
     const group = new THREE.Group();
-    group.add(bones, joints);
+    group.add(bones, joints, label);
     this.scene.add(group);
-    return { group, bones, joints };
+    return { group, bones, boneMat, joints, jointMat, label, labelCanvas, labelTexture, lastText: "" };
   }
 
   private writeSlot(slot: Slot, lms: Landmark[]): void {
@@ -156,5 +182,40 @@ export class HandSkeleton {
       jointPos.setXYZ(i, this.tmp.x, this.tmp.y, this.tmp.z);
     }
     jointPos.needsUpdate = true;
+  }
+
+  private updateLabel(slot: Slot, state: HandState, role: HandRole | undefined, color: number): void {
+    // Sit the label just below the wrist.
+    toScene(state.landmarks[WRIST], this.tmp);
+    slot.label.position.set(this.tmp.x, this.tmp.y - 0.1, Z);
+
+    const name = role ? ROLE_LABEL[role] : "";
+    const text = `${name}: ${state.pinch.toFixed(2)}`;
+    if (text === slot.lastText) return;
+    slot.lastText = text;
+
+    const ctx = slot.labelCanvas.getContext("2d")!;
+    const { width, height } = slot.labelCanvas;
+    ctx.clearRect(0, 0, width, height);
+    ctx.font = "bold 32px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = "rgba(0,0,0,0.6)";
+    ctx.strokeText(text, width / 2, height / 2);
+    ctx.fillStyle = "#" + color.toString(16).padStart(6, "0");
+    ctx.fillText(text, width / 2, height / 2);
+    slot.labelTexture.needsUpdate = true;
+  }
+
+  private disposeSlot(slot: Slot): void {
+    this.scene.remove(slot.group);
+    slot.bones.geometry.dispose();
+    slot.boneMat.dispose();
+    slot.joints.geometry.dispose();
+    slot.jointMat.dispose();
+    (slot.label.material as THREE.SpriteMaterial).dispose();
+    slot.labelTexture.dispose();
   }
 }
