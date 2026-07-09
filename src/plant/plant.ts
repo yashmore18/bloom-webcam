@@ -9,7 +9,8 @@ const STEM_COLOR = new THREE.Color(0x2fd35a); // lime stem
 const TIP_COLOR = new THREE.Color(0xdcffb0); // bright growing frontier
 const FLOWER_PALETTE = [0xff5d8f, 0xffd23f, 0xff8c42, 0xc77dff, 0xff6f61];
 
-const BLOOM_WINDOW = 0.08; // how much growth-past-birth a flower takes to open
+const BLOOM_WINDOW = 0.08; // how much grow-past-birth a flower takes to appear
+const BUD_FRACTION = 0.22; // size of a born-but-unbloomed flower (a small bud)
 
 const vertexShader = /* glsl */ `
   attribute float birth;
@@ -56,7 +57,10 @@ const centerGeometry = new THREE.CircleGeometry(0.4, 16);
 
 export interface PlantVisual {
   group: THREE.Group;
-  setGrowth(growth: number): void;
+  /** 0..1 — reveals the stems and makes flowers appear as buds along the tips. */
+  setGrow(grow: number): void;
+  /** 0..1 — opens the (already-grown) buds from small bud to full flower. */
+  setBloom(bloom: number): void;
   setPosition(x: number, y: number): void;
   setSway(radians: number): void;
   setOpacity(opacity: number): void;
@@ -145,17 +149,35 @@ export function createPlantVisual(plant: Plant, hue = 0): PlantVisual {
     return { mesh, center, birth: f.birth };
   });
 
-  function setGrowth(growth: number): void {
-    stemMaterial.uniforms.uGrowth.value = growth;
+  // grow gates whether a flower has appeared (as a bud); bloom opens it.
+  let grow = 0;
+  let bloom = 0;
+
+  function applyFlowers(): void {
     for (const node of flowerNodes) {
-      // 0 until growth reaches the flower's birth, easing to full over BLOOM_WINDOW.
-      const t = THREE.MathUtils.clamp((growth - node.birth) / BLOOM_WINDOW, 0, 1);
-      const s = t * t * (3 - 2 * t); // smoothstep
-      node.mesh.scale.setScalar(s * flowerRadius);
-      node.center.scale.setScalar(s * flowerRadius * 0.45);
+      // born-ness: 0 until grow reaches the flower's birth, easing in over BLOOM_WINDOW.
+      const t = THREE.MathUtils.clamp((grow - node.birth) / BLOOM_WINDOW, 0, 1);
+      const born = t * t * (3 - 2 * t); // smoothstep
+      // openness: born bud (BUD_FRACTION) → full flower (1) as bloom rises.
+      const open = THREE.MathUtils.lerp(BUD_FRACTION, 1, bloom);
+      const s = born * open * flowerRadius;
+      node.mesh.scale.setScalar(s);
+      node.center.scale.setScalar(s * 0.45);
     }
   }
-  setGrowth(0);
+
+  function setGrow(value: number): void {
+    grow = value;
+    stemMaterial.uniforms.uGrowth.value = grow;
+    applyFlowers();
+  }
+
+  function setBloom(value: number): void {
+    bloom = value;
+    applyFlowers();
+  }
+  setGrow(0);
+  setBloom(0);
 
   function setPosition(x: number, y: number): void {
     group.position.set(x, y, 0);
@@ -179,5 +201,5 @@ export function createPlantVisual(plant: Plant, hue = 0): PlantVisual {
     // rosetteGeometry/centerGeometry are shared across instances — not disposed.
   }
 
-  return { group, setGrowth, setPosition, setSway, setOpacity, dispose };
+  return { group, setGrow, setBloom, setPosition, setSway, setOpacity, dispose };
 }
