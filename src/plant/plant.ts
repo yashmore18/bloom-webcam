@@ -80,18 +80,38 @@ interface FlowerNode {
 export function createPlantVisual(plant: Plant, hue = 0): PlantVisual {
   const group = new THREE.Group();
 
-  // ── stems (one LineSegments, growth via shader) ──
+  // ── stems (one quad-ribbon mesh with real width, growth via shader) ──
+  // Each segment becomes a thin rectangle (2 tris) offset perpendicular to its
+  // direction, so stems have visible thickness (a plain LineSegments is stuck
+  // at 1px). Birth per vertex keeps the uGrowth reveal working unchanged.
+  const HALF_WIDTH = plant.height * 0.007;
   const segCount = plant.segments.length;
-  const positions = new Float32Array(segCount * 2 * 3);
-  const births = new Float32Array(segCount * 2);
+  const positions = new Float32Array(segCount * 4 * 3);
+  const births = new Float32Array(segCount * 4);
+  const indices = new Uint32Array(segCount * 6);
   plant.segments.forEach((s, i) => {
-    positions.set([s.x1, s.y1, 0, s.x2, s.y2, 0], i * 6);
-    births[i * 2] = s.birth;
-    births[i * 2 + 1] = s.birth;
+    const dx = s.x2 - s.x1;
+    const dy = s.y2 - s.y1;
+    const len = Math.hypot(dx, dy) || 1e-6;
+    const nx = (-dy / len) * HALF_WIDTH;
+    const ny = (dx / len) * HALF_WIDTH;
+    positions.set(
+      [
+        s.x1 + nx, s.y1 + ny, 0,
+        s.x1 - nx, s.y1 - ny, 0,
+        s.x2 + nx, s.y2 + ny, 0,
+        s.x2 - nx, s.y2 - ny, 0,
+      ],
+      i * 12
+    );
+    births.fill(s.birth, i * 4, i * 4 + 4);
+    const v = i * 4;
+    indices.set([v, v + 1, v + 2, v + 1, v + 3, v + 2], i * 6);
   });
   const stemGeo = new THREE.BufferGeometry();
   stemGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
   stemGeo.setAttribute("birth", new THREE.BufferAttribute(births, 1));
+  stemGeo.setIndex(new THREE.BufferAttribute(indices, 1));
 
   const stemMaterial = new THREE.ShaderMaterial({
     vertexShader,
@@ -105,8 +125,9 @@ export function createPlantVisual(plant: Plant, hue = 0): PlantVisual {
     transparent: true,
     depthTest: false,
     depthWrite: false,
+    side: THREE.DoubleSide,
   });
-  const stems = new THREE.LineSegments(stemGeo, stemMaterial);
+  const stems = new THREE.Mesh(stemGeo, stemMaterial);
   stems.renderOrder = 1;
   stems.frustumCulled = false;
   group.add(stems);

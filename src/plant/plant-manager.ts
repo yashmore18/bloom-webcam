@@ -30,7 +30,9 @@ export class PlantTemplate implements TemplateModule {
 
   init(scene: THREE.Scene): void {
     this.scene = scene;
-    const geometry = generatePlant({ iterations: 4, seed: 4, targetHeight: PLANT_HEIGHT, maxFlowers: 26 });
+    // No tight flower cap: spacing/breathing-room comes from the dedupe cell,
+    // and keeping every deduped tip guarantees a flower at every branch end.
+    const geometry = generatePlant({ iterations: 4, seed: 4, targetHeight: PLANT_HEIGHT, maxFlowers: 80 });
     this.plant = createPlantVisual(geometry, 0);
     this.plant.setPosition(this.posX, this.posY);
     this.scene.add(this.plant.group);

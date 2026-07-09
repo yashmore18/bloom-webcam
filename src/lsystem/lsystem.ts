@@ -158,9 +158,14 @@ export function generatePlant(options: PlantOptions = {}): Plant {
     }
   }
 
+  // Normalize births into [0, BIRTH_MAX] (not [0,1]): `grow` only approaches
+  // the pinch target (max 1) asymptotically, and a tip needs grow > birth to
+  // reveal + flower, so births must top out below 1 or the outermost branch
+  // ends would never fully grow/bloom (leaving bare branches).
+  const BIRTH_MAX = 0.82;
   const norm = maxDist || 1;
-  for (const s of segments) s.birth = Math.min(1, s.birth / norm);
-  for (const f of rawFlowers) f.birth = Math.min(1, f.birth / norm);
+  for (const s of segments) s.birth = Math.min(1, s.birth / norm) * BIRTH_MAX;
+  for (const f of rawFlowers) f.birth = Math.min(1, f.birth / norm) * BIRTH_MAX;
 
   // Scale so the plant is targetHeight tall, root at origin.
   let minY = 0;
