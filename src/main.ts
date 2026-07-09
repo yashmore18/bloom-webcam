@@ -5,8 +5,8 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { HandTracking } from "./hand/hand-tracking";
-import { PinchOverlay } from "./hand/pinch-overlay";
-import { SunflowerTemplate } from "./plant/plant-manager";
+import { HandSkeleton } from "./hand/hand-skeleton";
+import { PlantTemplate } from "./plant/plant-manager";
 import { Recorder } from "./recorder";
 import type { HandState, TemplateModule } from "./types";
 
@@ -41,9 +41,9 @@ const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.55, // strength — dialed down so bloomed flowers stay legible, not washed out
+  0.85, // strength
   0.5, // radius
-  0.55 // threshold
+  0.5 // threshold
 );
 composer.addPass(bloomPass);
 composer.addPass(new OutputPass());
@@ -61,14 +61,14 @@ let bgMesh: THREE.Mesh | null = null;
 
 // ── interaction + overlays ────────────────────────────────────────────────
 const handTracking = new HandTracking();
-const overlay = new PinchOverlay();
-overlay.init(scene);
+const skeleton = new HandSkeleton();
+skeleton.init(scene);
 let tracking = false;
 
-// Template registry — one entry today (the grow/bloom sunflower). Adding a
-// second template later means adding an entry here; the loop stays the same.
+// Template registry — one entry today (the L-system plant). Adding a second
+// generative template later means adding an entry here; the loop stays the same.
 const templates: { name: string; module: TemplateModule }[] = [
-  { name: "sunflower", module: new SunflowerTemplate() },
+  { name: "plant", module: new PlantTemplate() },
 ];
 const activeTemplate = templates[0].module;
 activeTemplate.init(scene);
@@ -167,7 +167,7 @@ function animate(): void {
   const dt = clock.getDelta();
 
   const states = debug.forceStates ?? (tracking ? handTracking.getStates(performance.now()) : []);
-  overlay.update(states);
+  skeleton.update(states);
   activeTemplate.update(states, dt);
 
   composer.render();
