@@ -35,8 +35,12 @@ export class PlantTemplate implements TemplateModule {
     this.time += dt;
     const roles = assignRoles(states);
 
-    let growTarget = this.grow; // default: hold
-    let bloomTarget = this.bloom;
+    // While ≥1 hand is present, an absent role holds its last value (so
+    // one-handed control doesn't reset the other). With NO hands at all, both
+    // recede to 0 so the plant disappears rather than lingering fully bloomed.
+    const noHands = states.length === 0;
+    let growTarget = noHands ? 0 : this.grow;
+    let bloomTarget = noHands ? 0 : this.bloom;
     for (const s of states) {
       const role = roles.get(s.id);
       if (role === "grow") growTarget = s.pinch;
