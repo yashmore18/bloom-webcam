@@ -7,6 +7,9 @@ export interface Landmark {
   z: number;
 }
 
+/** MediaPipe handedness label (as reported for the raw camera frame). */
+export type Handedness = "Left" | "Right";
+
 /**
  * The per-frame state of one tracked hand, consumed by templates and the
  * skeleton overlay. Kept as a plain data bag so the InteractionSource
@@ -23,6 +26,8 @@ export interface HandState {
   pinch: number;
   /** The 21 smoothed landmarks (normalized image coords) for the skeleton overlay. */
   landmarks: Landmark[];
+  /** Which physical hand this is, per MediaPipe (used for stable role assignment). */
+  handedness?: Handedness;
 }
 
 /**
