@@ -25,7 +25,7 @@ export class PlantTemplate implements TemplateModule {
 
   init(scene: THREE.Scene): void {
     this.scene = scene;
-    const geometry = generatePlant({ iterations: 4, seed: 12345, targetHeight: PLANT_HEIGHT });
+    const geometry = generatePlant({ iterations: 3, seed: 12345, targetHeight: PLANT_HEIGHT });
     this.plant = createPlantVisual(geometry, 0);
     this.plant.setPosition(0, ANCHOR_Y);
     this.scene.add(this.plant.group);
