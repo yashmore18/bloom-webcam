@@ -36,6 +36,9 @@ export interface InteractionSource {
   getStates(timestamp: number): HandState[];
 }
 
+/** Which parameter a hand drives in the two-hand grow/bloom interaction. */
+export type HandRole = "grow" | "bloom";
+
 /**
  * Any visual effect (L-system plant today, other generative templates later)
  * implements this. 3 methods — add a new template by writing one file that
