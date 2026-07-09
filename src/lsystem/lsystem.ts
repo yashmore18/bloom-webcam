@@ -42,8 +42,13 @@ export interface PlantOptions {
   maxFlowers?: number;
 }
 
+// Monopodial bouquet: each X puts out two symmetric side branches AND a central
+// leader that keeps climbing ([+X][-X] then F X). Rooted heading straight up
+// with a wide branch angle, the side branches fan outward-and-up from a single
+// base into a vertical V / funnel (vase); the central leader + symmetry keep it
+// upright with no sideways lean. Terminal X's are the tips (one flower each).
 const RULES: Record<string, string> = {
-  X: "F+[[X]-X]-F[-FX]+X",
+  X: "F[+X][-X]FX",
   F: "FF",
 };
 const AXIOM = "X";
@@ -83,8 +88,8 @@ interface Turtle {
  */
 export function generatePlant(options: PlantOptions = {}): Plant {
   const {
-    iterations = 4,
-    angleDeg = 22,
+    iterations = 3,
+    angleDeg = 30,
     seed = 1,
     jitter = 0.12,
     targetHeight = 1,
