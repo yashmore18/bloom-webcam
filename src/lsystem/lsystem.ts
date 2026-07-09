@@ -182,7 +182,7 @@ export function generatePlant(options: PlantOptions = {}): Plant {
     f.y *= scale;
   }
 
-  const flowers = dedupeFlowers(rawFlowers, targetHeight * 0.05, maxFlowers);
+  const flowers = dedupeFlowers(rawFlowers, targetHeight * 0.07, maxFlowers);
   return { segments, flowers, height: targetHeight };
 }
 

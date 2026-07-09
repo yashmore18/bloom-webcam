@@ -15,7 +15,7 @@ const EASE = 0.14; // ease grow/bloom toward pinch targets (no snapping)
 const POS_EASE = 0.15; // ease plant position toward the hands' midpoint
 const SWAY_AMPLITUDE = 0.04; // radians
 const SWAY_SPEED = 1.3;
-const PLANT_HEIGHT = 0.65; // compact bouquet (shorter stem)
+const PLANT_HEIGHT = 1.15; // the hero of the scene — big, with room to breathe
 const BASE_OFFSET_Y = -0.35; // base sits below the hands so blooms rise around them
 const START_Y = -0.85;
 
@@ -30,7 +30,7 @@ export class PlantTemplate implements TemplateModule {
 
   init(scene: THREE.Scene): void {
     this.scene = scene;
-    const geometry = generatePlant({ iterations: 4, seed: 4, targetHeight: PLANT_HEIGHT });
+    const geometry = generatePlant({ iterations: 4, seed: 4, targetHeight: PLANT_HEIGHT, maxFlowers: 26 });
     this.plant = createPlantVisual(geometry, 0);
     this.plant.setPosition(this.posX, this.posY);
     this.scene.add(this.plant.group);
