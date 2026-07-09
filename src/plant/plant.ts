@@ -84,7 +84,7 @@ export function createPlantVisual(plant: Plant, hue = 0): PlantVisual {
   // Each segment becomes a thin rectangle (2 tris) offset perpendicular to its
   // direction, so stems have visible thickness (a plain LineSegments is stuck
   // at 1px). Birth per vertex keeps the uGrowth reveal working unchanged.
-  const HALF_WIDTH = plant.height * 0.007;
+  const HALF_WIDTH = plant.height * 0.005;
   const segCount = plant.segments.length;
   const positions = new Float32Array(segCount * 4 * 3);
   const births = new Float32Array(segCount * 4);
