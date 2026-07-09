@@ -15,7 +15,7 @@ const EASE = 0.14; // ease grow/bloom toward pinch targets (no snapping)
 const POS_EASE = 0.15; // ease plant position toward the hands' midpoint
 const SWAY_AMPLITUDE = 0.04; // radians
 const SWAY_SPEED = 1.3;
-const PLANT_HEIGHT = 0.8; // compact bouquet
+const PLANT_HEIGHT = 0.65; // compact bouquet (shorter stem)
 const BASE_OFFSET_Y = -0.35; // base sits below the hands so blooms rise around them
 const START_Y = -0.85;
 

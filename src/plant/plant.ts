@@ -130,7 +130,7 @@ export function createPlantVisual(plant: Plant, hue = 0): PlantVisual {
     depthWrite: false,
   });
 
-  const flowerRadius = plant.height * 0.05;
+  const flowerRadius = plant.height * 0.062; // factor bumped so blooms keep size as the stem shortens
   const flowerNodes: FlowerNode[] = plant.flowers.map((f, i) => {
     const mesh = new THREE.Mesh(rosetteGeometry, petalMaterials[i % petalMaterials.length]);
     mesh.position.set(f.x, f.y, 0.01);
