@@ -4,17 +4,20 @@ import { assignRoles } from "../hand/roles";
 import { generatePlant } from "../lsystem/lsystem";
 import { createPlantVisual, type PlantVisual } from "./plant";
 
-// TemplateModule: one shared L-system plant, fixed at bottom-center, growing up.
-// Two hands drive it — the Grow-role hand's pinch eases the `grow` parameter
-// (stems reveal + flower buds appear), the Bloom-role hand's pinch eases
-// `bloom` (buds open into full flowers). A parameter whose role hand is absent
-// holds its last value.
+// TemplateModule: one shared L-system plant that floats to the midpoint of the
+// hands and grows upward from there. Two hands drive it — the Grow-role hand's
+// pinch eases `grow` (stems reveal + flower buds appear), the Bloom-role hand's
+// pinch eases `bloom` (buds open). An absent role's parameter holds its last
+// value while ≥1 hand is present; with no hands, grow & bloom ease to 0 (the
+// plant recedes) and the position holds.
 
 const EASE = 0.14; // ease grow/bloom toward pinch targets (no snapping)
+const POS_EASE = 0.15; // ease plant position toward the hands' midpoint
 const SWAY_AMPLITUDE = 0.04; // radians
 const SWAY_SPEED = 1.3;
-const PLANT_HEIGHT = 1.1;
-const ANCHOR_Y = -0.85; // root near the bottom of the frustum
+const PLANT_HEIGHT = 0.8; // compact bouquet
+const BASE_OFFSET_Y = -0.35; // base sits below the hands so blooms rise around them
+const START_Y = -0.85;
 
 export class PlantTemplate implements TemplateModule {
   private scene!: THREE.Scene;
@@ -22,12 +25,14 @@ export class PlantTemplate implements TemplateModule {
   private grow = 0;
   private bloom = 0;
   private time = 0;
+  private posX = 0;
+  private posY = START_Y;
 
   init(scene: THREE.Scene): void {
     this.scene = scene;
-    const geometry = generatePlant({ iterations: 3, seed: 12345, targetHeight: PLANT_HEIGHT });
+    const geometry = generatePlant({ iterations: 4, seed: 4, targetHeight: PLANT_HEIGHT });
     this.plant = createPlantVisual(geometry, 0);
-    this.plant.setPosition(0, ANCHOR_Y);
+    this.plant.setPosition(this.posX, this.posY);
     this.scene.add(this.plant.group);
   }
 
@@ -49,8 +54,24 @@ export class PlantTemplate implements TemplateModule {
 
     this.grow += (growTarget - this.grow) * EASE;
     this.bloom += (bloomTarget - this.bloom) * EASE;
+
+    // Float toward the midpoint of the present hands (hold position if none).
+    if (!noHands) {
+      let mx = 0;
+      let my = 0;
+      for (const s of states) {
+        mx += s.x;
+        my += s.y;
+      }
+      mx /= states.length;
+      my /= states.length;
+      this.posX += (mx - this.posX) * POS_EASE;
+      this.posY += (my + BASE_OFFSET_Y - this.posY) * POS_EASE;
+    }
+
     this.plant.setGrow(this.grow);
     this.plant.setBloom(this.bloom);
+    this.plant.setPosition(this.posX, this.posY);
     this.plant.setSway(Math.sin(this.time * SWAY_SPEED) * SWAY_AMPLITUDE);
   }
 

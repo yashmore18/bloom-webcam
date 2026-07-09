@@ -36,6 +36,8 @@ export interface PlantOptions {
   seed?: number;
   /** Random angle jitter (radians) applied per turn. */
   jitter?: number;
+  /** Per-sub-step heading drift (radians) that gives stems a natural curve. */
+  curl?: number;
   /** Target world height to scale the plant to (root at origin, growing +y). */
   targetHeight?: number;
   /** Max number of flowers kept (outermost tips), after spatial dedupe. */
@@ -80,6 +82,8 @@ interface Turtle {
   y: number;
   angle: number;
   dist: number;
+  /** Smoothly-varying angular velocity that bends the stem into gentle curves. */
+  curlVel: number;
 }
 
 /**
@@ -88,8 +92,8 @@ interface Turtle {
  */
 export function generatePlant(options: PlantOptions = {}): Plant {
   const {
-    iterations = 3,
-    angleDeg = 30,
+    iterations = 4,
+    angleDeg = 28,
     seed = 1,
     jitter = 0.12,
     targetHeight = 1,
@@ -99,25 +103,39 @@ export function generatePlant(options: PlantOptions = {}): Plant {
   const rand = mulberry32(seed);
   const baseAngle = (angleDeg * Math.PI) / 180;
   const stepLen = 1;
+  // Draw each step as several short sub-segments whose heading follows a damped,
+  // integrated drift, so stems curve organically instead of reading as rigid
+  // lines. A moderate up-righting bias keeps them trending upward (no off-axis
+  // wander) while the branch angle still fans the bouquet.
+  const SUBSTEPS = 4;
+  const curlAccel = options.curl ?? 0.045;
+  const CURL_DAMP = 0.86;
+  const UP_BIAS = 0.05;
 
   const symbols = expand(iterations);
   const segments: Segment[] = [];
   const rawFlowers: Flower[] = [];
 
-  let state: Turtle = { x: 0, y: 0, angle: Math.PI / 2, dist: 0 }; // heading up
+  let state: Turtle = { x: 0, y: 0, angle: Math.PI / 2, dist: 0, curlVel: 0 }; // heading up
   const stack: Turtle[] = [];
   let maxDist = 0;
 
   for (const ch of symbols) {
     switch (ch) {
       case "F": {
-        const nx = state.x + Math.cos(state.angle) * stepLen;
-        const ny = state.y + Math.sin(state.angle) * stepLen;
-        segments.push({ x1: state.x, y1: state.y, x2: nx, y2: ny, birth: state.dist });
-        state.x = nx;
-        state.y = ny;
-        state.dist += stepLen;
-        if (state.dist > maxDist) maxDist = state.dist;
+        const sub = stepLen / SUBSTEPS;
+        for (let k = 0; k < SUBSTEPS; k++) {
+          state.curlVel = state.curlVel * CURL_DAMP + (rand() - 0.5) * 2 * curlAccel;
+          state.angle += state.curlVel;
+          state.angle += (Math.PI / 2 - state.angle) * UP_BIAS; // keep trending up
+          const nx = state.x + Math.cos(state.angle) * sub;
+          const ny = state.y + Math.sin(state.angle) * sub;
+          segments.push({ x1: state.x, y1: state.y, x2: nx, y2: ny, birth: state.dist });
+          state.x = nx;
+          state.y = ny;
+          state.dist += sub;
+          if (state.dist > maxDist) maxDist = state.dist;
+        }
         break;
       }
       case "+":
